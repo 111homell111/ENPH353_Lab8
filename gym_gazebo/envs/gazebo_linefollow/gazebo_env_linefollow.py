@@ -60,12 +60,12 @@ class Gazebo_Linefollow_Env(gazebo_env.GazeboEnv):
 
         gray_frame = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
         gray_frame = cv2.GaussianBlur(gray_frame, (3, 3), 0)
-        gray_frame = gray_frame[-100:, :]
+        gray_frame = gray_frame[-50:, :]
 
         _, mask = cv2.threshold(gray_frame, 130, 255, cv2.THRESH_BINARY_INV)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        state = np.zeros(20)
+        state = np.zeros(10)
         if contours: 
             cv2.drawContours(cv_image, max(contours, key=cv2.contourArea), -1, (0, 255, 0), 2)
             M = cv2.moments(max(contours, key=cv2.contourArea))
@@ -74,10 +74,10 @@ class Gazebo_Linefollow_Env(gazebo_env.GazeboEnv):
                 cy = int(M["m01"]/M["m00"])
                 #_, width = gray_frame.shape
                 bin_width = 32
-                bin_height = 10 #unhinged name 
+                #bin_height = 10 #unhinged name 
                 #print(cx, bin_width, cx//bin_width)
                 state[cx//bin_width] = 1
-                state[10 + cy//bin_height] = 1
+                #state[10 + cy//bin_height] = 1
                 cv2.circle(cv_image, (cx, cy), radius=3, color=(255, 255, 255), thickness=-1)  # Red dot with radius 5
             else:
                 print("weird error")
@@ -116,10 +116,13 @@ class Gazebo_Linefollow_Env(gazebo_env.GazeboEnv):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
     
-    def calculate_reward(self, state):
+    def calculate_reward_bad(self, state, action):
         '''
         Reward function based on how close the agent is to the ideal state [0,0,0,0,1,0,0,0,0]
         '''
+        if 1 not in state:
+            return -20
+
         if np.argmax(state) in [3, 4, 5]:
             self.middle_count += 1  # Increment if in the middle
         else:
@@ -130,14 +133,78 @@ class Gazebo_Linefollow_Env(gazebo_env.GazeboEnv):
         current_position = np.argmax(state)  # Find the index where the '1' is located
         distance_from_ideal = abs(current_position - ideal_position)
 
-        base_reward = max(0, 10 - 2 * distance_from_ideal)  # Reward decreases as distance increases
+        base_reward = 15 - 5 * distance_from_ideal  # Reward decreases as distance increases
         
         # Apply a multiplier based on how long the line has stayed in the middle
         multiplier = 1 + (self.middle_count * 0.1)  # Example: 10% bonus for each consecutive step in the middle
 
         reward = base_reward * multiplier
+
+        if action == 0:
+            reward += 5
+
+        if np.argmax(state) == ideal_position:
+            reward += 30
+ 
         
         return reward
+    
+    def calculate_reward(self, state, action):
+        if 1 not in state:
+            if action == 0:
+                return -30
+            return -10
+
+
+        position = np.argmax(state)
+
+        if position in [4, 5]: #going straight
+            if action == 0:
+                return 25 #good!
+            else:
+                return 1 #meh
+
+        elif position in [2, 3]: #we're too far right
+            if action == 1: #turn left good
+                return 15 
+            elif action ==3: #forward and really left good
+                return 20
+            elif action == 2: #turn right really bad!
+                return -20
+            elif action == 4: #forward and right bad
+                return -10
+            
+        elif position in [0,1]: #we're too far right
+            if action == 1: #turn left good
+                return 25
+            elif action == 2: #turn right really bad!
+                return -50
+            else:
+                return -40
+            
+        elif position in [6,7]: #we're too far left
+            if action == 2: #turn right good
+                return 15
+            elif action == 1: #turn left really bad!
+                return -20
+            elif action == 3: #forwad and left bad
+                return -10
+            elif action == 4: #forward and really right good
+                return 20
+            
+        elif position in [8,9]: #we're too far left
+            if action == 2: #turn right good
+                return 25
+            elif action == 1: #turn left really bad!
+                return -50
+            else: 
+                return -40
+            
+
+
+        return 0 #otherwise meh
+    
+
 
     def step(self, action):
         rospy.wait_for_service('/gazebo/unpause_physics')
@@ -153,18 +220,18 @@ class Gazebo_Linefollow_Env(gazebo_env.GazeboEnv):
         if action == 0:  # FORWARD
             vel_cmd.linear.x = 0.5
             vel_cmd.angular.z = 0.0
-        elif action == 1:  # FORWARD LEFT
+        elif action == 3:  # FORWARD LEFT
             vel_cmd.linear.x = 0.2
             vel_cmd.angular.z = 0.3
-        elif action == 2:  # FORWARD RIGHT
+        elif action == 4:  # FORWARD RIGHT
             vel_cmd.linear.x = 0.2
             vel_cmd.angular.z = -0.3
-        elif action == 3: # LEFT
+        elif action == 1: # LEFT
             vel_cmd.linear.x = 0.0
-            vel_cmd.angular.z = 0.5
-        elif action == 4: #RIGHT
+            vel_cmd.angular.z = 0.7
+        elif action == 2: #RIGHT
             vel_cmd.linear.x = 0.0
-            vel_cmd.angular.z = -0.5
+            vel_cmd.angular.z = -0.7
 
         self.vel_pub.publish(vel_cmd)
 
@@ -187,7 +254,7 @@ class Gazebo_Linefollow_Env(gazebo_env.GazeboEnv):
 
         # Set the rewards for your action
         if not done:
-            reward = self.calculate_reward(state)
+            reward = self.calculate_reward(state, action)
         else:
             reward = -200
 

@@ -36,16 +36,16 @@ if __name__ == '__main__':
     last_time_steps = numpy.ndarray(0)
 
     #qlearn = qlearn.QLearn(actions=range(env.action_space.n),
-                           #alpha=0.2, gamma=0.8, epsilon=0.8)
+    #                       alpha=0.2, gamma=0.8, epsilon=0.9)
     qlearn = qlearn.QLearn(actions=range(5),
-                           alpha=0.2, gamma=0.8, epsilon=0.9)
+                           alpha=0.2, gamma=0.8, epsilon=0)
 
-    qlearn.loadBestPolicy()
-    #qlearn.loadQ("QValues")
+    #qlearn.loadBestPolicy()
+    qlearn.loadQ("QValues5")
 
     initial_epsilon = qlearn.epsilon
 
-    epsilon_discount = 0.9986#0.9986
+    epsilon_discount = 0.990#0.9986
 
     start_time = time.time()
     total_episodes = 10000
@@ -94,7 +94,7 @@ if __name__ == '__main__':
                 print(f"New best policy saved with reward: {highest_reward}")
 
         if (x > 0) and (x % 5 == 0):
-            qlearn.saveQ("QValues")
+            qlearn.saveQ("QValues5")
             plotter.plot(env)
         
 
